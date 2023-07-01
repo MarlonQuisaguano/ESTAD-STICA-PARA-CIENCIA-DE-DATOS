@@ -1,0 +1,474 @@
+---
+title: "Proyecto N°1"
+author: "Marlon Alejandro Quisaguano Acosta"
+date: "2023-06-15"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("readxl")
+library("dplyr")
+library(modeest)
+library(e1071)
+```
+
+
+
+## Objetivos 
+
+* Análisis Exploratorio de datos (EDA e interpretación de resultados) - Estadística Descriptiva; Incluir la generación de nuevas variables de valor de ser necesario.
+
+* Aplicar Estadística Inferencial - Trabajar hasta con 5 variables.
+
+# 1. EDA de Siniestros en Seguros
+
+### Lectura de Datos
+
+En esta sección importaremos la información de interés. Para esto primero nos dirigimos a la dirección de la base de datos mediante la función ´setwd()´, en la cual se debe introducir la dirección del archivo compartido "Data_Siniestros en Seguros.csv", sin olvidar reemplazar el "/". También se hace uso del paquete "readxl" para la lectura del archivo .csv.
+
+```{r , echo=TRUE,warning=FALSE }
+setwd("C:/Users/marlo/OneDrive/Documentos/CURSO DE DATA SCIENTIST/Proyecto1/")
+data_Seguros <- read.csv("Data_Siniestros en Seguros.csv",sep=";",header=TRUE, fileEncoding="latin1")
+
+```
+
+Observemos las primeras 5 filas de los datos importados:
+
+```{r , echo=TRUE,warning=FALSE }
+head(data_Seguros,n = 5)
+```
+
+A demás, podemos observar que existen 5.800 filas (registros de clientes) y 18 variables descriptivas (columnas que describen a cada cliente)
+```{r , echo=TRUE,warning=FALSE }
+dim(data_Seguros)
+```
+estas variables o columnas describen al cliente de la siguiente manera:
+
+```{r , echo=TRUE,warning=FALSE }
+str(data_Seguros)
+```
+* Cliente_ID: Codifica o identifica al cliente, funciona como número DNI de cada cliente. (Puede considerarse como una variable numérica exclusiva para cada cliente o caracter que lo idetifica).
+
+* Antigüedad_Maxima: Cuantifica en meses la antiguedad del cliente. (Variable numérica).
+
+* Nivel_Ingresos: Categoriza al cliente en 5 niveles de ingresos siendo 0 (bajo) y 5 (alto). (Variable categórica ordinal).
+
+* Saldo_Pendiente: Cuantifica el saldo pendiente de cada cliente. (Variable numérica).
+
+* Puntaje_Morosidad1, Puntaje_Morosidad2, Puntaje_Morosidad3, Puntaje_Morosidad4, Puntaje_Morosidad5, Puntaje_Morosidad6: Categoriza a al cliente en 7 niveles de de morosidad según su morosidad, 0: No Dq., 1:1-29... 6: 150-179. (Variable categórica).
+
+* Saldo_Pendiente_Seg: Saldo pendiente de la póliza de seguro. (Variable numérica).
+
+* Siniestros1, Siniestros2, Siniestros3, Siniestros4, Siniestros5, Siniestros6 : Corresponden al número de siniestros en la historia del cliente. (Variable numérica).
+
+* Estado_Siniestro: Clasifica al cliente en 2 estados: Siniestro 1 y No sinientro 0. Variable binaria.
+
+
+
+
+
+Como podemos observar, entre nuestras variables pueden existir datos nulos o perdidos, por lo que es necesario realizar realizar un análisis por variable para determinar cual de ellas debe ser tratada. Por lo tanto, en la siguiente sección procederemos a estructurar, limpiar y analizar nuestra base de datos.
+
+### Estructura y limpieza de datos.
+
+Primeramente procedemos a cambiar el tipo de cada una de las vriables, para esto hacemos uso de las descripciones de cada una de las variables mencionadas en la sección anterior, y del paquete "dplyr" para la manipulación:
+
+* Cliente_ID: Puede considerarse como una variable numérica exclusiva para cada cliente o caracter que lo idetifica. (character)
+
+* Antigüedad_Maxima: Variable numérica, (integer)
+
+* Nivel_Ingresos: Variable categórica ordinal. (factor)
+
+* Saldo_Pendiente: Variable numérica. (double)
+
+* Puntaje_Morosidad1, Puntaje_Morosidad2, Puntaje_Morosidad3, Puntaje_Morosidad4, Puntaje_Morosidad5, Puntaje_Morosidad6: Variable categórica. (factor)
+
+* Saldo_Pendiente_Seg: Variable numérica. (double)
+
+* Siniestros1, Siniestros2, Siniestros3, Siniestros4, Siniestros5, Siniestros6 : Variable numérica. (integer)
+
+* Estado_Siniestro: Variable binaria. (factor)
+
+
+```{r pressure, echo=TRUE,warning=FALSE }
+data_Seguros <- data_Seguros %>%
+  mutate(Cliente_ID = as.character(Cliente_ID),
+         Antigüedad_Maxima = as.integer(Antigüedad_Maxima),
+         Nivel_Ingresos = as.factor(Nivel_Ingresos),
+         Saldo_Pendiente = as.double(Saldo_Pendiente),
+         Puntaje_Morosidad1 = as.factor(Puntaje_Morosidad1),
+         Puntaje_Morosidad2 = as.factor(Puntaje_Morosidad2),
+         Puntaje_Morosidad3 = as.factor(Puntaje_Morosidad3),
+         Puntaje_Morosidad4 = as.factor(Puntaje_Morosidad4),
+         Puntaje_Morosidad5 = as.factor(Puntaje_Morosidad5),
+         Puntaje_Morosidad6 = as.factor(Puntaje_Morosidad6),
+         Saldo_Pendiente_Seg = as.double(Saldo_Pendiente_Seg),
+         Siniestros1 = as.integer(Siniestros1),
+         Siniestros2 = as.integer(Siniestros2),
+         Siniestros3 = as.integer(Siniestros3),
+         Siniestros4 = as.integer(Siniestros4),
+         Siniestros5 = as.integer(Siniestros5),
+         Siniestros6 = as.integer(Siniestros6),
+         Estado_Siniestro = as.factor(Estado_Siniestro)
+         
+         )
+```
+
+Ahora generamos una función para poder conocer los valores para cada una de las variables si existe la presencia de valores perdidos:
+
+```{r , echo=TRUE,warning=FALSE }
+
+naniar <- function(data)
+{
+  variables_perdidas <- data %>%
+  select_if(function(x)  anyNA(x))
+  
+ valores_perdidos <- data.frame(variable = names(variables_perdidas),
+                               valores_perdidos = sapply(variables_perdidas, function(x) sum(is.na(x))),
+                               porcentaje_perdidos = round(sapply(variables_perdidas, function(x) mean(is.na(x)))*100,2))
+
+  return(valores_perdidos)
+}
+naniar(data_Seguros)
+```
+La variable Cliente_ID puede ser imputada por una columna de nuevos códigos distintos ya que no representa un dato significante para el objetivo del presente proyecto. Esto lo hacemos suponiendo que a posterior no se vaya a cruzar la variable Cliente_ID con otra base.
+
+```{r , echo=TRUE,warning=FALSE }
+data_Seguros$Cliente_ID <- as.character(c(1:dim(data_Seguros)[1]))
+```
+Entonces, como podemos observar entre las variables de interés, Antigüedad_Maxima tiene el mayor porcentaje de valores perdidos (10%) por variable y por lo tanto a nivel global. De esta manera, en la siguiente sección nos encargaremos de analizar a cada una de estas variables con el objetivo de imputar los valores faltantes.
+
+
+
+### Análisis de Valores faltantes
+
+Existen diversas formas de imputar valores faltantes, entre las formas mas sencillas está hacer uso de medidas de tendencia central como el promedio, media o mediana. En la siguiente sección utilizaremos una de estas medidas para realizar la imputación. Cabe señalar que una mejor imputación puede generarse al realizar utilizando un modelo de regresión en la cual se tome en cuenta la información de otra variable, es decir utilizar la información asociada al valor nulo para completar con mejor coherencia el valor perdido o atípico.
+
+## Imputación de datos Perdidos o atípicos.
+
+Primero identificaremos los datos perdidos o a típicos para lo cual primero realizaremos una prueba de estadística para saber si la variable sigue una distribución normal o no. Esto con el objetivo de poder escoger los límites para determinar si un valor es a típico o no.
+
+Primero tratemos los datos faltantes o perdidos, determinemos que variables tienen valores faltantes:
+
+```{r , echo=TRUE,warning=FALSE }
+variables_con_valores_perdidos <- function(data) {
+  missing_vars <- colnames(data)[apply(data, 2, function(x) any(is.na(x)))]
+  return(missing_vars)
+}
+variables_perdidos <- variables_con_valores_perdidos(data_Seguros) 
+```
+
+Ya hemos almacenado las variables con valores faltantes o perdidos, entonces generaremos una función que reemplace los datos perdidos por la media de la misma:
+
+```{r , echo=TRUE,warning=FALSE }
+reemplazar_valores_faltantes_con_media_moda <- function(data, variables_perdidos) {
+  
+  for (variable in variables_perdidos) {
+    
+    if (is.factor(data[[variable]])) {
+      moda <- as.character(modeest::mlv(data[[variable]]))
+      data[[variable]][is.na(data[[variable]])] <- moda
+    } else {
+      media <- mean(data[[variable]], na.rm = TRUE)
+      data[[variable]][is.na(data[[variable]])] <- media
+    }
+    
+  }
+  
+  return(data)
+}
+
+data_Seguros <- reemplazar_valores_faltantes_con_media(data_Seguros,variables_perdidos)
+
+```
+
+Ahora verifiquemos que no existe ningún dato perdido en la base procesada:
+
+```{r , echo=TRUE,warning=FALSE }
+sum(is.na(data_Seguros))
+```
+Como podemos observar, tenemos 0 valores perdidos en la base procesada.
+
+
+Ahora realicemos pruebas de normalidad a las variables ya que pretendemos realizar un análisis de valores atípicos. Esto para poder determinar el límite correcto de cada variable según su comportamiento.
+
+
+```{r , echo=TRUE,warning=FALSE }
+
+
+prueba_normalidad <- function(data) {
+  
+  resultados <- data.frame(Variable = character(), Normal = logical(), stringsAsFactors = FALSE)
+  
+  for (variable in colnames(data)){# variable <- colnames(data)[1]
+    if(is.numeric(data[[variable]])||is.double(data[[variable]])){
+      
+      resultado <- nortest::ad.test(data[[variable]])
+      normal <- !resultado$p.value < 0.05
+      
+       resultados <- rbind(resultados, data.frame(Variable = variable, Normal = normal, stringsAsFactors = FALSE))
+    }
+  }
+  
+  return(resultados)
+  
+}
+
+variables_normales <- prueba_normalidad(data_Seguros)
+```
+Ahora como sabemos que dependiend de la distribución que siguan las vairiables se puede determinar los respectivos límites para los valores outlayers. Es decir:
+
+*Las variable que sigue una distribución normal: Los valores que se encuentren a más de 3 desviaciones estándar por encima o por debajo de la media se consideran outliers
+*Variable que no sigue una distribución normal: Método basado en z-score: Los outliers se pueden identificar utilizando z-scores. Los valores que tengan un z-score por encima de un cierto límite (por ejemplo, 2 o 3) se consideran outliers.
+
+De esta manera, definimos el siguiente código:
+
+```{r , echo=TRUE,warning=FALSE }
+
+
+
+imputar_outliers_con_media <- function(data,variables_normales, z_score_limite = 3, percentil_alto = 95, percentil_bajo = 5) {
+  for (i in 1:dim(variables_normales)[1] ) {
+    
+    variable <- variables_normales[i, "Variable"]
+    normal <- variables_normales[i, "Normal"]
+    
+    if (normal) {
+      outliers <- boxplot.stats(data[[variable]])$out
+    } else {
+      z_scores <- abs(scale(data[[variable]]))
+      outliers <- data[[variable]][z_scores > z_score_limite]
+    }
+    
+    if (length(outliers) > 0) {
+      data[[variable]][data[[variable]] %in% outliers] <- mean(data[[variable]], na.rm = TRUE)
+    }
+  }
+  
+  return(data)
+}
+
+data_imputada_Seguros <- imputar_outliers_con_media(data_Seguros,variables_normales)
+
+
+```
+
+De esta manera, en el siguiente capítulo podemos avanzar con estadística descriptiva.
+
+### Estadística descriptiva
+
+Ahora podemos empezar a realizar un análisis descriptivo de las variables, para lo cual implementamos una función que nos muestra información general de las variables.
+
+```{r , echo=TRUE,warning=FALSE }
+Medidas_disp <- function(data)
+{
+
+ variables_numericas <- data %>%
+  select_if(function(x) is.numeric(x))
+ 
+ 
+  medidas_de_dispersion <- data.frame(
+    Rango = sapply(variables_numericas,function(x) (round(max(x) - min(x), 2)) ),
+    Mininmo = sapply(variables_numericas, function(x) min(x)),
+    Percentil25 = sapply(variables_numericas,function(x) quantile(x,.25) ),
+    Percentil50 = sapply(variables_numericas,function(x) quantile(x,.50)),
+    Percentil75 = sapply(variables_numericas,function(x) quantile(x,.75)),
+    Percentil90 = sapply(variables_numericas,function(x) quantile(x,.90)),
+    Maximo = sapply(variables_numericas, function(x) max(x)),
+    Rango_intercuantilico = sapply(variables_numericas,function(x)  (quantile(x,.75) - quantile(x,.25))),
+    Varianza = sapply(variables_numericas,function(x) round(var(x),2) ),
+    Desv.estand  = sapply(variables_numericas,function(x) round(sd(x),2)),
+    Coef.var = sapply(variables_numericas,function(x) round(sd(x) /mean(x) * 100,2) ),
+    Kurtosis = sapply(variables_numericas,function(x) round(kurtosis(x),5) )
+  )
+    
+return(medidas_de_dispersion)                           
+}
+
+Med_Disp <- Medidas_disp(data_imputada_Seguros)
+Med_Disp
+```
+
+A partir del resúmen generado podemos aseverar lo siguiente acerca de la población en estudio:
+*Aproximadamente, el 25% (1.450) de las personas se encuentran por debajo o tienen al menos 1 año dos meses de antiguedad, también el 15% (870) de las personas tienen una antiguedad mayor a de 5 años y nueve meses pero menor a 9 años 4 mees;  el 50% (2.900)  personas que se encuentran entre el 1 año 2 meses y 5 años 9 meses de antiguedad. Finalmente, únicamente el 10% (580) personas que superan el el 9 años 4 meses de antiguedad con un máximo de 21.2 años de antiguedad.
+
+*Aproximadamente, el 50% (2.900) de las personas no supera un monto de deuda en su saldo pendiente de 1.100 dólares, sin embargo, el 10% (580) personas superan los 8.000 dólares con un valor máximo de 21.713 dólares!.
+*También podemos observar que 90% (5.220) de las personas no superan los 2 números de siniestros. Por lo tanto la probabilidad de que pueda ocurrir un sinientro dentro de la población es estudio es baja, sin embargo, la improbabilidad no implica que este tipo de eventos no vayan a ocurrir. 
+
+Y de la misma manera podemos generar medidas de tendencia central:
+
+```{r , echo=TRUE,warning=FALSE}
+
+Tendencia_central <- function(data)
+{
+
+ variables_numericas <- data %>%
+  select_if(function(x) is.numeric(x))
+ 
+ tendencia_central <- data.frame(variable = names(variables_numericas),
+                                mediana = sapply(variables_numericas, function(x) median(x)),
+                                media = sapply(variables_numericas, function(x) mean(x)),
+                                moda = sapply(variables_numericas, function(x) mlv(x, na.rm = TRUE)),
+  centro_de_amplitud = sapply(variables_numericas, function(x) (min(x) + max(x))/2),
+  media_geometrica = sapply(variables_numericas,function(x) (exp(sum(log(x))/length(x)) )),
+  media_armonica = sapply(variables_numericas,function(x) ( round(1/mean(1/x), 2) )),
+  media_recortada_10_porc = sapply(variables_numericas,function(x) round(mean(x,trim=10/100), 2)),
+  timedia = sapply( variables_numericas ,function(x) round((quantile(x,.25, na.rm = TRUE) + 2*quantile(x,.50, na.rm = TRUE) + quantile(x,.75, na.rm = TRUE))/4, 2))
+  
+  )
+ 
+return(tendencia_central)
+
+}
+tend_central <- Tendencia_central(data_imputada_Seguros)
+tend_central
+```
+
+
+## Estadistica Inferencial
+
+Para fines de esta sección, realizaremos procedemos a reestructurar la base de datos en un máximo de 5 variables. Para esto utilizaremos primero una prueba de correlacion entre las variables (Puntaje_Morosidad1, Puntaje_Morosidad2, Puntaje_Morosidad3, Puntaje_Morosidad4, Puntaje_Morosidad5, Puntaje_Morosidad6), (Siniestros1, Siniestros2, Siniestros3, Siniestros4, Siniestros5, Siniestros6) y (	
+Saldo_Pendiente, Saldo_Pendiente_Seguro).
+
+
+```{r , echo=TRUE,warning=FALSE}
+grupos <- list(c("Puntaje_Morosidad1","Puntaje_Morosidad2","Puntaje_Morosidad3","Puntaje_Morosidad4","Puntaje_Morosidad5","Puntaje_Morosidad6"),c("Saldo_Pendiente","Saldo_Pendiente_Seg"),c("Siniestros1","Siniestros2","Siniestros3","Siniestros4","Siniestros5","Siniestros6"))
+dataframe<-data_imputada_Seguros
+calcular_correlaciones_no_parametricas <- function(dataframe, grupos) {
+  correlaciones <- list()
+  i=0
+  for (grupo in grupos) {
+    i=i+1
+    variables_grupo <- dataframe[, grupo, drop = FALSE]
+    
+
+    variables_cuantitativas <- variables_grupo[, sapply(variables_grupo, is.numeric)]
+    
+
+    variables_factor <- variables_grupo[, sapply(variables_grupo, is.factor)]
+    
+   
+      if (ncol(variables_factor) > 0) {
+
+      variables_factor_num <- lapply(variables_factor, as.numeric)
+      
+
+      matriz_variables <- cbind(variables_cuantitativas, variables_factor_num)
+    } else {
+
+      matriz_variables <- variables_cuantitativas
+    }
+    
+    if (ncol(matriz_variables) > 1) {
+      correlaciones_grupo <- cor(matriz_variables, method = "spearman", use = "pairwise.complete.obs")
+      correlaciones[[i]] <- correlaciones_grupo
+    } else {
+      correlaciones[[grupo]] <- NULL
+    }
+  }
+  
+  return(correlaciones)
+}
+calcular_correlaciones_no_parametricas(data_imputada_Seguros,grupos)
+
+
+```
+
+Como podemos observar basados en el análisis de correlaciones pueden existir variables redundantes en información, pero para esto realizaremos un análisis de componentes principales, de la siguiente manera:
+
+
+```{r , echo=TRUE,warning=FALSE}
+
+data_imputada_Seguros <- data_imputada_Seguros[,c(2,3,4,5,12,11,6,13,7,14,8,15,9,16,10,18)]
+
+analisis_pca <- function(dataframe) {
+  # Filtrar las variables numéricas (integer y double)
+  variables_numericas <- dataframe[, sapply(dataframe, is.numeric)]
+  
+  # Filtrar las variables factor
+  #variables_factor <- dataframe[, sapply(dataframe, is.factor)]
+  
+  # Realizar escalamiento de las variables numéricas
+  variables_numericas_escala <- scale(variables_numericas)
+  
+  # Convertir las variables factor a variables dummy
+  #variables_factor_dummy <- as.data.frame(model.matrix(~ 0 + variables_factor))
+  
+  # Combinar las variables numéricas escaladas y las variables factor dummy
+  matriz_variables <- cbind(variables_numericas_escala)#, variables_factor_dummy)
+  
+  # Realizar el PCA
+  pca_result <- prcomp(matriz_variables)
+  
+  # Obtener la matriz de cargas
+  matriz_cargas <- pca_result$rotation
+  
+  # Calcular la varianza explicada por cada componente principal
+  varianza_explicada <- pca_result$sdev^2 / sum(pca_result$sdev^2)
+  
+  # Obtener los nombres de las variables
+  nombres_variables <- colnames(matriz_variables)
+  
+  # Crear un data frame con los resultados
+  resultados <- data.frame(Variable = nombres_variables, Varianza_Explicada = varianza_explicada)
+  
+  return(resultados)
+}
+
+analisis_pca (data_imputada_Seguros[-1,-18])
+```
+
+De esta manera podemos concluír que 87% de la variabilidad total está explicada por las variables: Antiguedad_Máxima, Nivel_Ingresos, Saldo_Pendiente, Puntaje_Morosidad1 y Siniestro1. Y de esta manera hemos podido minimizar la dimensionalidad de nuestros datos. Una manera para explicar la funcionalidad de el análisis de componentes principales es la siguiente: Las 5 variables elejidas capturan el  87% de la información que explican las 9 variables originales. 
+
+
+Este tipo de análisis es de gran ayuda para dentificar variables importantes, eliminar la multicolinealidad entre las varaibles y redimensionalizar la data. A continuación seleccionamos las varaibles que explican el 80% de los datos originales:
+
+```{r , echo=TRUE,warning=FALSE}
+#data_imputada_Seguros$Nivel_Ingresos<-round(data_imputada_Seguros$Nivel_Ingresos,0)
+data_redimensionada <- data_imputada_Seguros[,c(1,2,3,4,5,16)]
+head(data_redimensionada,5)
+```
+
+### ANálisis de Hipótesis: ¿Existe una relación significativa entre el nivel de ingresos del cliente y la probabilidad de sufrir un accidente?
+
+Basados en los datos históricos podemos plantearnos la siguiente prueba de hipótesis:
+
+*H<sub>0</sub> : No hay una relación significativa entre el nivel de ingresos del cliente y si actualmente ha sufrido un accidente.
+
+* H<sub>a</sub> :  Existe una relación significativa entre el nivel de ingresos del cliente y si actualmente ha sufrido un accidente.
+
+De esta manera, si se encuentra una relación significativa entre el nivel de ingresos y la probabilidad de sufrir un accidente, la aseguradora podría ajustar sus políticas de suscripción o tarifas de seguro para reflejar este riesgo.
+
+Para este fin realizamos la siguiente pruea no paramétrica:
+
+```{r , echo=TRUE,warning=FALSE}
+
+tabla_contingencia <- table(data_redimensionada$Nivel_Ingresos, data_redimensionada$Estado_Siniestro)
+
+resultado_prueba <- chisq.test(tabla_contingencia)
+
+# Imprimir los resultados
+print(resultado_prueba)
+```
+Con base a este resultado rechazamos la hipótesis nula " No hay una relación significativa entre el nivel de ingresos del cliente y si actualmente ha sufrido un accidente" y aseverar que existe suficiente evidencia estadística para aceptar que existe una relación estadísticamente significativa entre el nivel de ingresos del cliente y si ha sufrido un accidente. 
+
+Ahora veamos que tipo de realación existe entre ambas variables mediante una prueba de correlación:
+
+```{r , echo=TRUE,warning=FALSE}
+variable1 <- as.numeric(data_redimensionada$Nivel_Ingresos)
+variable2 <- if_else(data_redimensionada$Estado_Siniestro == "si",1,0)
+
+# Calcular la correlación
+correlation <- cor(variable1, variable2, method = "spearman")
+print(correlation)
+```
+Entonces, aunque la correlación es débil, el hecho de que exista una relación estadísticamente significativa implica que el nivel de ingresos del cliente puede ser un factor importante a considerar en la evaluación del riesgo de accidentes y por lo tanto es posible que exista otros factores adicionales que estén influyendo en la probabilidad de sufrir un accidente y que no se haya tenido en cuenta.
+
+
+# Recomendaciones
+
+Teniendo en cuenta este último caso de análisis, es importante tener en cuenta que la correlación no implica causalidad. Es posible que haya otros factores o variables de confusión que estén influyendo en la relación entre el nivel de ingresos y los accidentes. Por lo tanto, se recomienda realizar un análisis más completo y considerar otras variables relevantes antes de tomar decisiones o conclusiones definitivas.
+
+
+
