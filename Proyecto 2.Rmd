@@ -1,0 +1,633 @@
+---
+title: "Proyecto N°2"
+author: "Marlon Alejandro Quisaguano Acosta"
+date: "2023-06-15"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("readxl")
+library("dplyr")
+library(modeest)
+library(e1071)
+```
+
+
+
+## Objetivos 
+
+* 1. Aplicar Estadística Descriptiva 
+
+* 2. Aplicar Estadística Inferencial
+
+* 3. Generar nuevas variables y/o drivers
+
+* 4. Realizar el análisis exploratorio de datos (EDA)
+
+* 5. Generar nuevas variables de valor.
+
+* 6. Realizar la segmentación (k= 3, 4 ó 5)
+
+* 7. Desarrollar un modelo logístico; considerar como variable independiente la variable Segmentación
+
+* 8. Interpretar el ajuste del modelo
+
+
+# 1. Lectura y Limpiez de Datos
+
+### Lectura de Datos
+
+En esta sección importaremos la información de interés. Para esto primero nos dirigimos a la dirección de la base de datos mediante la función ´setwd()´, en la cual se debe introducir la dirección del archivo compartido "Caso. Data_Nutrición", sin olvidar reemplazar el "/". También se hace uso del paquete "readxl" para la lectura del archivo .xlsx.
+
+```{r , echo=TRUE,warning=FALSE }
+
+setwd("C:/Users/marlo/OneDrive/Documentos/CURSO DE DATA SCIENTIST/Proyecto 2/")
+data_Nutricion <- readxl::read_xlsx("Caso. Data_Nutricion.xlsx",sheet = "Data")
+
+```
+
+Observemos las primeras 5 filas y 5 variables de los datos importados:
+
+```{r , echo=TRUE,warning=FALSE }
+head(data_Nutricion[,c(1:5)],n = 5)
+```
+
+A demás, podemos observar que existen 652 filas (registros de clientes) y 23 variables descriptivas (columnas que describen a cada individuo)
+```{r , echo=TRUE,warning=FALSE }
+dim(data_Nutricion)
+```
+estas variables o columnas describen a cada indiciduo de la siguiente manera:
+
+```{r , echo=TRUE,warning=FALSE }
+str(data_Nutricion)
+
+```
+* N° y Individuo: Codifica o identifica al individuo, funciona como número DNI de cada cliente. (Puede considerarse como una variable numérica exclusiva para cada individuo o caracter que lo idetifica).
+
+* Sexo: Claifica al individuo entre (M)masculino y (F)femenino (Factor).
+
+* Edad, Talla, peso_kg, circun_cuello, IMC, circun_cintura, cadera, ind_cintura_cadera, ind_cintura_estatura, por_grasa_corporal, masa_corporal_magra_kg, pliegue_cutaneo_BICEPS, pliegue_cutaneo_TRICEPS, pliegue_cutaneo_ESCAPULAR, pliegue_cutaneo_SUPRAILIACO: 
+Las variables de la base de datos describen distintos aspectos relacionados con la composición corporal y características físicas de una persona. (Variable numéricas: integer o double).
+
+* clasif_diagnos_talla_edad, clasif_diagnos_IMC, clasif_perimetro_abdominal, clasif_anemia  : Categoriza al individuo en niveles categóricos deacuerdo a la talla, edad, índice de masa corporal, perímetro adominal, anemia. (Variable categórica-factor).
+
+* target: Identifica a la variable objetivo (Tiene diabetes 1 / No tiene diabetes 0). (Variable integer). Cabe recalcar que puede ser tratada como una bariable binomial y hasta que sea necesario se tratará como una bariable categórica.
+
+
+Como podemos observar, a continuación:
+```{r , echo=TRUE,warning=FALSE }
+sum(is.na(data_Nutricion))
+```
+
+entre nuestras variables existen datos nulos o perdidos, por lo que es necesario realizar  un análisis por variable para determinar cual de ellas debe ser tratada. Por lo tanto, en la siguiente sección procederemos a estructurar, limpiar y analizar nuestra base de datos.
+
+### Estructura y limpieza de datos.
+
+Primeramente procedemos a cambiar el tipo de cada una de las vriables, para esto hacemos uso de las descripciones de cada una de las variables mencionadas en la sección anterior, y del paquete "dplyr" para la manipulación:
+
+* N° y Individuo: (character).
+
+* Sexo: (character - factor).
+
+* Edad, Talla, peso_kg, circun_cuello, IMC, circun_cintura, cadera, ind_cintura_cadera, ind_cintura_estatura, por_grasa_corporal, masa_corporal_magra_kg, pliegue_cutaneo_BICEPS, pliegue_cutaneo_TRICEPS, pliegue_cutaneo_ESCAPULAR, pliegue_cutaneo_SUPRAILIACO (numerics: integers o doubles).
+
+* clasif_diagnos_talla_edad, clasif_diagnos_IMC, clasif_perimetro_abdominal, clasif_anemia  : (character-factor).
+
+* target: (character-factor).
+
+
+
+```{r pressure, echo=TRUE,warning=FALSE }
+data_Nutricion <- data_Nutricion %>%
+  mutate(`N°`  = as.character(`N°`),
+         Individuo = as.character(Individuo),
+         sexo  = as.factor(sexo),
+         talla = as.double(talla),
+         edad = as.integer(edad),
+         peso_kg = as.double(peso_kg),
+         circun_cuello = as.double(circun_cuello),
+         IMC = as.double(IMC),
+         circun_cintura = as.double(circun_cintura),
+         cadera = as.double(cadera),
+         ind_cintura_cadera = as.double(ind_cintura_cadera),
+         ind_cintura_estatura = as.double(ind_cintura_estatura),
+         por_grasa_corporal = as.double(por_grasa_corporal),
+         masa_corporal_magra_kg = as.double(masa_corporal_magra_kg),
+         pliegue_cutaneo_BICEPS = as.double(pliegue_cutaneo_BICEPS),
+         pliegue_cutaneo_TRICEPS = as.double(pliegue_cutaneo_TRICEPS),
+         pliegue_cutaneo_ESCAPULAR = as.double(pliegue_cutaneo_ESCAPULAR),
+         pliegue_cutaneo_SUPRAILIACO = as.double(pliegue_cutaneo_SUPRAILIACO),
+         clasif_diagnos_talla_edad = as.factor(clasif_diagnos_talla_edad),
+         clasif_diagnos_IMC = as.factor(clasif_diagnos_IMC),
+         clasif_perimetro_abdominal = as.factor(clasif_perimetro_abdominal),
+         clasif_anemia = as.factor(clasif_anemia),
+         target = as.factor(target)
+         
+         )
+```
+
+Ahora generamos una función para poder conocer los valores para cada una de las variables si existe la presencia de valores perdidos:
+
+```{r , echo=TRUE,warning=FALSE }
+
+naniar <- function(data)
+{
+  variables_perdidas <- data %>%
+  select_if(function(x)  anyNA(x))
+  
+ valores_perdidos <- data.frame(variable = names(variables_perdidas),
+                               valores_perdidos = sapply(variables_perdidas, function(x) sum(is.na(x))),
+                               porcentaje_perdidos = round(sapply(variables_perdidas, function(x) mean(is.na(x)))*100,2)) 
+ 
+  valores_perdidos<-valores_perdidos %>% dplyr::arrange(desc(valores_perdidos)) 
+  return(valores_perdidos)
+}
+a<-naniar(data_Nutricion)
+a
+```
+
+Entonces, como podemos observar entre las variables de interés, sexo tiene el mayor porcentaje de valores perdidos (3.83%) de todas las variables. De esta manera, en la siguiente sección nos encargaremos de analizar a cada una de estas variables con el objetivo de imputar los valores faltantes.
+
+
+
+### Análisis de Valores faltantes
+
+Existen diversas formas de imputar valores faltantes, entre las formas mas sencillas está hacer uso de medidas de tendencia central como el promedio, media o mediana. En la siguiente sección utilizaremos una de estas medidas para realizar la imputación. Cabe señalar que una mejor imputación puede generarse al realizar utilizando un modelo de regresión en la cual se tome en cuenta la información de otra variable, es decir utilizar la información asociada al valor nulo para completar con mejor coherencia el valor perdido o atípico.
+
+## Imputación de datos Perdidos o atípicos.
+
+Primero identificaremos los datos perdidos o a típicos para lo cual primero realizaremos una prueba de estadística para saber si la variable sigue una distribución normal o no. Esto con el objetivo de poder escoger los límites para determinar si un valor es a típico o no.
+
+Primero tratemos los datos faltantes o perdidos, determinemos que variables tienen valores faltantes:
+
+```{r , echo=TRUE,warning=FALSE }
+variables_con_valores_perdidos <- function(data) {
+  missing_vars <- colnames(data)[apply(data, 2, function(x) any(is.na(x)))]
+  return(missing_vars)
+}
+variables_perdidos <- variables_con_valores_perdidos(data_Nutricion) 
+variables_perdidos
+```
+
+Ya hemos almacenado las variables con valores faltantes o perdidos, entonces generaremos una función que reemplace los datos perdidos por la media de la misma:
+
+```{r , echo=TRUE,warning=FALSE }
+reemplazar_valores_faltantes <- function(data, variables_perdidas) {
+  for (variable in variables_perdidas) {
+    if (is.numeric(data[[variable]])) {
+      media <- mean(data[[variable]], na.rm = TRUE)
+      data[[variable]][is.na(data[[variable]])] <- media
+    } else if (is.character(data[[variable]]) || is.factor(data[[variable]])) {
+      moda <- as.character(mlv(as.character(data[[variable]]),na.rm=TRUE))
+      data[[variable]][is.na(data[[variable]])] <- moda
+      data[[variable]] <- factor(data[[variable]]) # Convertir de nuevo a factor
+    }
+  }
+  
+  return(data)
+}
+data_Nutricion <- reemplazar_valores_faltantes(data_Nutricion,variables_perdidos)
+
+```
+
+Ahora verifiquemos que no existe ningún dato perdido en la base procesada:
+
+```{r , echo=TRUE,warning=FALSE }
+sum(is.na(data_Nutricion))
+```
+Como podemos observar, tenemos 0 valores perdidos en la base procesada.
+
+
+Ahora realicemos pruebas de normalidad a las variables ya que pretendemos realizar un análisis de valores atípicos. Esto para poder determinar el límite correcto de cada variable según su comportamiento.
+
+
+```{r , echo=TRUE,warning=FALSE }
+data <- data_Nutricion
+str(data)
+
+prueba_normalidad <- function(data) {
+  resultados <- data.frame(Variable = character(), Normal = logical(), Numerica = logical(), stringsAsFactors = FALSE)
+  
+  for (variable in colnames(data)) {
+    if (is.numeric(data[[variable]]) || is.double(data[[variable]])) {
+      resultado <- nortest::ad.test(data[[variable]])
+      normal <- !resultado$p.value < 0.05
+      
+      resultados <- rbind(resultados, data.frame(Variable = variable, Normal = normal, Numerica = TRUE, stringsAsFactors = FALSE))
+    } else {
+      normal <- NA
+      
+      resultados <- rbind(resultados, data.frame(Variable = variable, Normal = normal, Numerica = FALSE, stringsAsFactors = FALSE))
+    }
+  }
+  
+  return(resultados)
+}
+
+
+variables_normales <- prueba_normalidad(data_Nutricion)
+variables_normales
+```
+Ahora como sabemos que dependiend de la distribución que siguan las vairiables se puede determinar los respectivos límites para los valores outlayers. Es decir:
+
+*Las variable que sigue una distribución normal: Los valores que se encuentren a más de 3 desviaciones estándar por encima o por debajo de la media se consideran outliers
+*Variable que no sigue una distribución normal: Método basado en z-score: Los outliers se pueden identificar utilizando z-scores. Los valores que tengan un z-score por encima de un cierto límite (por ejemplo, 2 o 3) se consideran outliers.
+
+De esta manera, definimos el siguiente código:
+
+```{r , echo=TRUE,warning=FALSE }
+data <- data_Nutricion
+imputar_outliers <- function(data,variables_normales, z_score_limite = 3, percentil_alto = 95, percentil_bajo = 5) {
+  variables_normales <- variables_normales %>% dplyr::filter(Numerica==TRUE)
+  for (i in 1:dim(variables_normales)[1] ) {# i<-2
+    
+    variable <- variables_normales[i, "Variable"]
+    normal <- variables_normales[i, "Normal"]
+
+    if (normal) {
+      outliers <- boxplot.stats(data[[variable]])$out
+    }else {
+      z_scores <- abs(scale(data[[variable]]))
+      outliers <- data[[variable]][z_scores > z_score_limite]
+    }
+    
+    if (length(outliers) > 0) {
+      data[[variable]][data[[variable]] %in% outliers] <- mean(data[[variable]], na.rm = TRUE)
+    }
+  }
+  
+  return(data)
+}
+
+data_imputada_Nutricion <- imputar_outliers(data_Nutricion,variables_normales)
+
+
+```
+
+De esta manera, en el siguiente capítulo podemos avanzar con estadística descriptiva.
+
+### Estadística descriptiva
+
+Ahora podemos empezar a realizar un análisis descriptivo de las variables, para lo cual implementamos una función que nos muestra información general de las variables.
+
+```{r , echo=TRUE,warning=FALSE }
+
+Medidas_disp <- function(data)
+{
+
+ variables_numericas <- data %>%
+  select_if(function(x) is.numeric(x))
+ 
+ 
+  medidas_de_dispersion <- data.frame(
+    Rango = sapply(variables_numericas,function(x) (round(max(x) - min(x), 2)) ),
+    Mininmo = sapply(variables_numericas, function(x) min(x)),
+    Percentil25 = sapply(variables_numericas,function(x) quantile(x,.25) ),
+    Percentil50 = sapply(variables_numericas,function(x) quantile(x,.50)),
+    Percentil75 = sapply(variables_numericas,function(x) quantile(x,.75)),
+    Percentil90 = sapply(variables_numericas,function(x) quantile(x,.90)),
+    Maximo = sapply(variables_numericas, function(x) max(x)),
+    Rango_intercuantilico = sapply(variables_numericas,function(x)  (quantile(x,.75) - quantile(x,.25))),
+    Varianza = sapply(variables_numericas,function(x) round(var(x),2) ),
+    Desv.estand  = sapply(variables_numericas,function(x) round(sd(x),2)),
+    Coef.var = sapply(variables_numericas,function(x) round(sd(x) /mean(x) * 100,2) ),
+    Kurtosis = sapply(variables_numericas,function(x) round(kurtosis(x),5) )
+  )
+    
+return(medidas_de_dispersion)                           
+}
+
+Med_Disp <- Medidas_disp(data_imputada_Nutricion)
+Med_Disp
+```
+
+A partir del resúmen generado podemos aseverar lo siguiente acerca de la población en estudio:
+* Aproximadamente, el 25% (1.450) de las personas tienen entre 12 a 14 años, teniendo una gran cantidad de personas que se encuentran entre los 14 y 15 años 50%.
+
+* Podemos observar también que más del 50% tiene una estatura menor a 160 cm y solo un 10% alcanza el metro setenta.
+
+* Encontramos el primer dato relevante, ya que apesar de tener una población relativamente joven y de talla baja, podemos identificar que tienen un peso alto ya que el 50 % de la población se encuentra por encima del 55 kg.
+
+Y de la misma manera podemos generar medidas de tendencia central:
+
+```{r , echo=TRUE,warning=FALSE}
+
+Tendencia_central <- function(data)
+{
+
+ variables_numericas <- data %>%
+  select_if(function(x) is.numeric(x))
+ 
+ tendencia_central <- data.frame(variable = names(variables_numericas),
+                                mediana = sapply(variables_numericas, function(x) median(x)),
+                                media = sapply(variables_numericas, function(x) mean(x)),
+                                moda = sapply(variables_numericas, function(x) mlv(x, na.rm = TRUE)),
+  centro_de_amplitud = sapply(variables_numericas, function(x) (min(x) + max(x))/2),
+  media_geometrica = sapply(variables_numericas,function(x) (exp(sum(log(x))/length(x)) )),
+  media_armonica = sapply(variables_numericas,function(x) ( round(1/mean(1/x), 2) )),
+  media_recortada_10_porc = sapply(variables_numericas,function(x) round(mean(x,trim=10/100), 2)),
+  timedia = sapply( variables_numericas ,function(x) round((quantile(x,.25, na.rm = TRUE) + 2*quantile(x,.50, na.rm = TRUE) + quantile(x,.75, na.rm = TRUE))/4, 2))
+  
+  )
+ 
+return(tendencia_central)
+
+}
+tend_central <- Tendencia_central(data_imputada_Nutricion)
+tend_central
+```
+
+A partir de las medidas de tendencia central, podemos inferir que la edad promedio de los individuos es 14.7 años, un peso promedio de 56.2 kg,un indice de masa corporal de  32.07 kg.
+
+En este caso, un IMC de 32.07 indica que los individuos tienen obesidad. Sin embargo, es importante tener en cuenta que el IMC es una medida general y no tiene en cuenta la composición corporal específica, como la proporción de masa muscular y grasa. Es importante destacar que las medidas de tendencia central por sí solas no proporcionan un diagnóstico médico completo. Es necesario considerar otros factores relevantes, como el historial médico, los antecedentes familiares, los síntomas y realizar evaluaciones médicas adecuadas para obtener un diagnóstico médico preciso y completo.
+
+
+### Generación de variables de valor
+
+En esta sección reduciremos la dimensionalidad de nuestra información, por ejemplo creando una nueva variable de valor:
+
+* Adiposidad_subcutanea = pliegue_cutáneo_biceps + pliegue_cutáneo_triceps + pliegue_cutáneo_Escapular + pliegue_cutaneo_suprailiaco
+Esta variable explica la la adiposidad subcutánea general.
+
+```{r , echo=TRUE,warning=FALSE}
+data_imputada_Nutricion <- data_imputada_Nutricion %>% 
+  dplyr::mutate(adiposidad_subcutanea = pliegue_cutaneo_BICEPS+
+pliegue_cutaneo_ESCAPULAR+
+pliegue_cutaneo_SUPRAILIACO+
+pliegue_cutaneo_TRICEPS
+                  ) %>% 
+  dplyr::select(-pliegue_cutaneo_BICEPS, -pliegue_cutaneo_ESCAPULAR, -pliegue_cutaneo_SUPRAILIACO, -pliegue_cutaneo_TRICEPS)
+
+```
+
+De esta manera hemos creado una nueva variable de valor y disminuído la dimensionalidad del la data.
+
+
+## Segmentación k = 3
+
+En esta sección generaremos una segmentación de nuestra data lo cual nos servirá para encontrar patrones, o características comunes dentro de los datos. Para esto se utilizará un algoritmo que nos ayude a dividir nuestro conjunto de datos en grupos o segmentos más pequeños, de tal manera que los elementos dentro de cada grupo sean similares entre sí y sean diferentes de los elementos de otros grupos.
+
+En nuestro caso utilizaremos el algoritmo k-mean, que genera k centroides de manera aleatoria (individuos), a partir de los cuales, según la similitud con otros (individuos) los agrupa para generar el número de grupos especificados. 
+
+
+
+```{r , echo=TRUE,warning=FALSE}
+#install.packages("cluster")
+library(cluster)
+
+data <- data_imputada_Nutricion %>% dplyr::select(-`N°`,-Individuo,-target)
+
+str(data)
+factores <- data %>% select(where(is.factor))
+data_dummies <- model.matrix(~.-1, data = factores)
+numericas <- data %>% select(where(is.numeric))
+data_combined <- cbind(data_dummies, numericas)
+
+resultados <- kmeans(data_combined, centers = 3)
+clusters <- resultados$cluster
+
+data$segmentacion <- as.factor(clusters)
+data$target <- data_imputada_Nutricion$target
+str(data)
+```
+
+De esta manera hemos generado una segmentación de los datos y ahora observemos por cada segmento las características de cada una.
+
+```{r , echo=TRUE,warning=FALSE}
+segment_1 <- data %>% dplyr::filter(segmentacion=="1")
+segment_2 <- data %>% dplyr::filter(segmentacion=="2")
+segment_3 <- data %>% dplyr::filter(segmentacion=="3")
+```
+
+Ahora contrastemos el porcentaje de personas con diabetes (mediante la variable target = 1) y las medidas de disperción de la segmentación 1.
+```{r , echo=TRUE,warning=FALSE}
+print(round(sum(as.integer(segment_1$target)-1)/dim(segment_1)[1],1)*100)
+Medidas_disp(segment_1)
+
+```
+
+```{r , echo=TRUE,warning=FALSE}
+print(round(sum(as.integer(segment_2$target)-1)/dim(segment_2)[1],1)*100)
+Medidas_disp(segment_2)
+
+```
+
+```{r , echo=TRUE,warning=FALSE}
+print(round(sum(as.integer(segment_3$target)-1)/dim(segment_3)[1],1)*100)
+Medidas_disp(segment_3)
+
+```
+
+Como podemos observar la primera segmentación presenta la mayor proporción con individuos que presentan diabetes, ya que de la primera segmentación el 30 % de individuos presentan diabetes. Por otra parte, las segmentaciones 2 y 3  presentan tan solo 20% y 10% de individuos con diabetes respecto a su población. 
+
+De esta manera la segmentación mas interesante es la población de la segmentación 1, ya que podemos encontrar patrones interesantes asociados a la presencia de diabetes. Es decir, es mas probable que un individio que tenga características similares presenten diabetes. Por poner un ejemplo: es más probable que un individuo con 155 cm de estatura, 15 años de edad y peso de 56 kg (individuo del segmento 1) tenga diabetes a que un individuo con 159 cm de estatura, 15 años y peso de 50 kg (segmento 3).
+
+
+## Modelo Logit
+
+Para esta sección utilizaremos la información numérica de nuestos datos y agregamos nuestra variable de interés target luego de haber generado la variable dummy y quedarnos con la representativa:
+
+```{r}
+library(dummy)
+Data_Reg_log <- data_imputada_Nutricion %>% select_if(is.numeric) 
+Data_Reg_log$target <- dummy(data_imputada_Nutricion[,19])[,-1]
+knitr::kable(Data_Reg_log)
+```
+
+
+
+Ahora mediremos el poder predictivo de cada una de las varaibles consideradas.
+```{r}
+# con pROC
+library(pROC) 
+ROC1 <- roc(Data_Reg_log$target~as.numeric(Data_Reg_log$talla))
+
+print("Nivel predictibilidad de esta variable independiente sobre la variable dependiente es: ")
+print(ROC1)
+print("Intervalo de confianza de la curva ROC")
+print(ci.auc(ROC1))
+plot(ROC1)
+```
+Ahora mediremos el poder predictivo de cada una de las varaibles consideradas.
+```{r}
+# con pROC
+ROC1 <- roc(Data_Reg_log$target~as.numeric(Data_Reg_log$edad))
+
+print("Nivel predictibilidad de esta variable independiente sobre la variable dependiente es: ")
+print(ROC1)
+print("Intervalo de confianza de la curva ROC")
+print(ci.auc(ROC1))
+plot(ROC1)
+```
+
+
+Ahora mediremos el poder predictivo de cada una de las varaibles consideradas.
+```{r}
+# con pROC
+ROC1 <- roc(Data_Reg_log$target~as.numeric(Data_Reg_log$peso_kg))
+
+print("Nivel predictibilidad de esta variable independiente sobre la variable dependiente es: ")
+print(ROC1)
+print("Intervalo de confianza de la curva ROC")
+print(ci.auc(ROC1))
+plot(ROC1)
+```
+
+
+Ahora mediremos el poder predictivo de cada una de las varaibles consideradas.
+```{r}
+# con pROC
+ROC1 <- roc(Data_Reg_log$target~as.numeric(Data_Reg_log$circun_cuello))
+
+print("Nivel predictibilidad de esta variable independiente sobre la variable dependiente es: ")
+print(ROC1)
+print("Intervalo de confianza de la curva ROC")
+print(ci.auc(ROC1))
+plot(ROC1)
+
+```
+Ahora mediremos el poder predictivo de cada una de las varaibles consideradas.
+```{r}
+# con pROC
+ROC1 <- roc(Data_Reg_log$target~as.numeric(Data_Reg_log$IMC))
+
+print("Nivel predictibilidad de esta variable independiente sobre la variable dependiente es: ")
+print(ROC1)
+print("Intervalo de confianza de la curva ROC")
+print(ci.auc(ROC1))
+plot(ROC1)
+# Observamos esta variable puede predecir a la variable dependiente
+```
+```{r}
+# con pROC
+ROC1 <- roc(Data_Reg_log$target~as.numeric(Data_Reg_log$circun_cintura))
+
+print("Nivel predictibilidad de esta variable independiente sobre la variable dependiente es: ")
+print(ROC1)
+print("Intervalo de confianza de la curva ROC")
+print(ci.auc(ROC1))
+plot(ROC1)
+# Observamos esta variable puede predecir a la variable dependiente
+```
+```{r}
+# con pROC
+ROC1 <- roc(Data_Reg_log$target~as.numeric(Data_Reg_log$cadera))
+
+print("Nivel predictibilidad de esta variable independiente sobre la variable dependiente es: ")
+print(ROC1)
+print("Intervalo de confianza de la curva ROC")
+print(ci.auc(ROC1))
+plot(ROC1)
+# Observamos esta variable puede predecir a la variable dependiente
+```
+```{r}
+# con pROC
+ROC1 <- roc(Data_Reg_log$target~as.numeric(Data_Reg_log$ind_cintura_cadera))
+
+print("Nivel predictibilidad de esta variable independiente sobre la variable dependiente es: ")
+print(ROC1)
+print("Intervalo de confianza de la curva ROC")
+print(ci.auc(ROC1))
+plot(ROC1)
+# Observamos esta variable puede predecir a la variable dependiente
+```
+
+```{r}
+# con pROC
+ROC1 <- roc(Data_Reg_log$target~as.numeric(Data_Reg_log$ind_cintura_estatura))
+
+print("Nivel predictibilidad de esta variable independiente sobre la variable dependiente es: ")
+print(ROC1)
+print("Intervalo de confianza de la curva ROC")
+print(ci.auc(ROC1))
+plot(ROC1)
+# Observamos esta variable puede predecir a la variable dependiente
+```
+```{r}
+# con pROC
+ROC1 <- roc(Data_Reg_log$target~as.numeric(Data_Reg_log$por_grasa_corporal))
+
+print("Nivel predictibilidad de esta variable independiente sobre la variable dependiente es: ")
+print(ROC1)
+print("Intervalo de confianza de la curva ROC")
+print(ci.auc(ROC1))
+plot(ROC1)
+# Observamos esta variable puede predecir a la variable dependiente
+```
+```{r}
+# con pROC
+ROC1 <- roc(Data_Reg_log$target~as.numeric(Data_Reg_log$masa_corporal_magra_kg))
+
+print("Nivel predictibilidad de esta variable independiente sobre la variable dependiente es: ")
+print(ROC1)
+print("Intervalo de confianza de la curva ROC")
+print(ci.auc(ROC1))
+plot(ROC1)
+# Observamos esta variable puede predecir a la variable dependiente
+```
+```{r}
+# con pROC
+ROC1 <- roc(Data_Reg_log$target~as.numeric(Data_Reg_log$adiposidad_subcutanea))
+
+print("Nivel predictibilidad de esta variable independiente sobre la variable dependiente es: ")
+print(ROC1)
+print("Intervalo de confianza de la curva ROC")
+print(ci.auc(ROC1))
+plot(ROC1)
+# Observamos esta variable puede predecir a la variable dependiente
+```
+
+
+```{r}
+Data_Reg_log <- Data_Reg_log %>%
+  mutate_all(as.numeric)
+
+
+modelo1 <- glm(target~peso_kg+circun_cuello+IMC+circun_cintura+cadera+ind_cintura_estatura, data = Data_Reg_log, family="binomial")
+summary(modelo1)
+```
+
+```{r}
+
+modelo1 <- glm(target~peso_kg+circun_cuello+IMC+circun_cintura+ind_cintura_estatura, data = Data_Reg_log, family="binomial")
+summary(modelo1)
+```
+
+
+```{r}
+
+modelo1 <- glm(target~peso_kg+circun_cuello+IMC+ind_cintura_estatura, data = Data_Reg_log, family="binomial")
+summary(modelo1)
+```
+
+```{r}
+
+modelo1 <- glm(target~circun_cuello+IMC+circun_cintura+ind_cintura_estatura, data = Data_Reg_log, family="binomial")
+summary(modelo1)
+```
+
+```{r}
+
+modelo1 <- glm(target~peso_kg+circun_cuello+IMC, data = Data_Reg_log, family="binomial")
+summary(modelo1)
+```
+
+```{r}
+
+modelo1 <- glm(target~circun_cuello+IMC, data = Data_Reg_log, family="binomial")
+summary(modelo1)
+```
+
+
+### INTERPREACIÓN DEL MODELO
+
+
+target = -15.39 + 0.22988*circun_cuello   + 0.27661*IMC
+
+
+Si la variable circun_cuello aumenta en una unidad la probabilidad de que caiga en la población con diabetes aumenta un 22.98 porciento
+Si la variable IMC aumenta en una unidad la probabilidad de que caiga en la población con diabetes aumenta un 27.66 porciento
+
+
+
